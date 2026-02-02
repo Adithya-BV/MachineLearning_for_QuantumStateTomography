@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Working - Neural Network QST</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #2c3e50;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            text-align: center;
+        }
+
+        code {
+            background-color: #f0f0f0;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #c0392b;
+        }
+
+        pre {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #555;
+            font-style: italic;
+            background-color: #f1f8ff;
+            padding: 10px 15px;
+            margin: 20px 0;
+        }
+
+        .math-block {
+            background-color: #f8f9fa;
+            padding: 15px;
+            text-align: center;
+            font-family: 'Times New Roman', serif;
+            font-style: italic;
+            font-size: 1.1em;
+            border-radius: 4px;
+            border: 1px solid #e1e4e8;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Model Working</h1>
+
+        <h2>Mathematical Logic</h2>
+        <p>The goal is to reconstruct a density matrix ρ (a 2x2 complex matrix) while strictly satisfying three physical
+            constraints:</p>
+        <ol>
+            <li><strong>Hermitian</strong>: ρ = ρ†</li>
+            <li><strong>Positive Semi-Definite (PSD)</strong>: ρ &ge; 0 (eigenvalues &ge; 0)</li>
+            <li><strong>Unit Trace</strong>: Tr(ρ) = 1</li>
+        </ol>
+
+        <p>To enforce these inevitably within a Neural Network (which naturally outputs unconstrained real numbers), I
+            used the <strong>Cholesky Decomposition</strong>. Any PSD matrix can be written as:</p>
+        <div class="math-block">
+            ρ = L L†
+        </div>
+        <p>where L is a lower triangular matrix.</p>
+
+        <p>For a single qubit (2x2):</p>
+        <div class="math-block">
+            L = [[l00, 0], [l10, l11]]
+        </div>
+        <p>where l00, l11 &isin; &#8477;+ (strictly positive real) and l10 &isin; &#8450; (complex).</p>
+
+        <h3>Architecture Choice: Cholesky-MLP</h3>
+        <p>I selected a <strong>Multilayer Perceptron (MLP)</strong> architecture for this task, aligning with the
+            Hardware-Centric track.
+            MLPs are ideal for FPGA implementation because they rely on dense matrix-vector multiplications, which map
+            efficiency to DSP slices.</p>
+
+        <ul>
+            <li><strong>Input Layer</strong>: 6 units (Probabilities for Z0, Z1, X0, X1, Y0, Y1).</li>
+            <li><strong>Hidden Layers</strong>: 3 fully connected layers (128 units each) with LeakyReLU activation to
+                capture non-linear relationships between measurement statistics and state parameters.</li>
+            <li><strong>Output Layer</strong>: 4 units representing the parameters of L:
+                <ul>
+                    <li>Raw outputs for diagonal elements are passed through a <code>Softplus</code> activation to
+                        ensure positivity (l00, l11 > 0).</li>
+                    <li>Raw outputs for off-diagonal elements represent the real and imaginary parts of l10.</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h3>Trace Normalization</h3>
+        <p>After constructing ρ_raw = L L†, the trace may not be 1. We enforce unit trace by:</p>
+        <div class="math-block">
+            ρ = ρ_raw / Tr(ρ_raw)
+        </div>
+        <p>This step is differentiable, allowing backpropagation.</p>
+
+        <h2>High-Level Math to Hardware Logic Transition</h2>
+        <p>For Track 2 (Hardware-Centric), the transition from this Cholesky-MLP mathematical model to hardware logic
+            (e.g., via Vitis HLS) involves the following considerations:</p>
+
+        <ol>
+            <li><strong>Quantization</strong>:
+                <ul>
+                    <li>Floating point weights (FP32) in PyTorch must be quantized to fixed-point (e.g.,
+                        <code>ap_fixed&lt;16,6&gt;</code>) for FPGA deployment to minimize resource usage (LUTs/DSPs).
+                    </li>
+                    <li>The <code>LeakyReLU</code> activation is hardware-friendly as it is a simple piecewise linear
+                        function (x if x>0 else 0.1x), simpler than <code>tanh</code> or <code>sigmoid</code> which
+                        require look-up tables.</li>
+                </ul>
+            </li>
+            <li><strong>Parallelism</strong>:
+                <ul>
+                    <li>The matrix multiplications in the hidden layers (128 x 128) can be fully unrolled or pipelined.
+                    </li>
+                    <li>On an FPGA, we would use <code>#pragma HLS PIPELINE</code> to initiate a new inference every
+                        clock cycle (II=1).</li>
+                </ul>
+            </li>
+            <li><strong>Complex Arithmetic</strong>:
+                <ul>
+                    <li>The final Cholesky reconstruction involves complex number multiplication. In HLS, this maps to
+                        explicit real/imaginary separate datapaths: <code>(a+bi)(c+di) = (ac-bd) + i(ad+bc)</code>.</li>
+                    <li>The trace normalization (division) is expensive in hardware; in a deployed FPGA model, this is
+                        often implemented by multiplying by the inverse trace (computed via a Newton-Raphson divider or
+                        LUT).</li>
+                </ul>
+            </li>
+        </ol>
+
+        <blockquote>
+            <p>Note: The current implementation focuses on the software reference model (PyTorch) which serves as the
+                "Golden Model" for any future hardware synthesis.</p>
+        </blockquote>
+
+        <h2>Loss Function</h2>
+        <p>I trained the model using <strong>Matrix MSE</strong>:</p>
+        <div class="math-block">
+            L_loss = Mean(| ρ_pred - ρ_true |^2)
+        </div>
+        <p>Although Fidelity is the ultimate metric, I found that MSE provided a smoother loss landscape for the
+            optimizer.</p>
+    </div>
+</body>
+
+</html>

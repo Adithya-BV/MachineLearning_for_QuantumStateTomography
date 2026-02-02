@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Replication Guide - Neural Network QST</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #2c3e50;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            text-align: center;
+        }
+
+        code {
+            background-color: #f0f0f0;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #c0392b;
+        }
+
+        pre {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        .step {
+            background-color: #f8f9fa;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Replication Guide</h1>
+
+        <h2>1. Environment Setup</h2>
+
+        <h3>Prerequisites</h3>
+        <ul>
+            <li>Python 3.8 or higher</li>
+            <li><code>pip</code> package manager</li>
+        </ul>
+
+        <h3>Installation</h3>
+        <div class="step">
+            <ol>
+                <li>Clone this repository to your local machine.</li>
+                <li>Navigate to the root folder.</li>
+                <li>Install the required dependencies:</li>
+            </ol>
+            <pre><code>pip install -r requirements.txt</code></pre>
+        </div>
+
+        <h2>2. Dataset Generation</h2>
+        <p>I generate synthetic data using <code>src/data_gen.py</code>. This script creates random quantum states and
+            simulates projective measurements.</p>
+
+        <p><strong>Command:</strong></p>
+        <pre><code>python src/data_gen.py --train_size 10000 --test_size 1000 --shots 1024</code></pre>
+        <p><strong>Output:</strong></p>
+        <ul>
+            <li><code>data/train_data.npz</code></li>
+            <li><code>data/test_data.npz</code></li>
+            <li><code>data/benchmark_data.npz</code> (Standard benchmark states)</li>
+        </ul>
+
+        <h2>3. Model Training</h2>
+        <p>Train the Cholesky-MLP model.</p>
+
+        <p><strong>Command:</strong></p>
+        <pre><code>python src/train.py --epochs 20 --batch_size 32 --lr 0.001</code></pre>
+        <p><strong>Behavior:</strong></p>
+        <ul>
+            <li>Trains for 20 epochs.</li>
+            <li>Validates after each epoch.</li>
+            <li>Saves the model with the lowest validation loss to <code>outputs/best_model.pt</code>.</li>
+        </ul>
+
+        <h2>4. Evaluation and Verification</h2>
+        <p>To audit performance against the assignment requirements (Fidelity and Trace Distance metrics):</p>
+
+        <p><strong>Command:</strong></p>
+        <pre><code>python src/validate_benchmarks.py</code></pre>
+        <p><strong>Output:</strong></p>
+        <ul>
+            <li>Prints table of Fidelity and Trace Distance for |0&rang;, |1&rang;, |+&rang;, |-&rang;, |i&rang;,
+                |-i&rang;.</li>
+            <li>Confirms if mean fidelity meets expectations (>97% with 1024 shots).</li>
+        </ul>
+
+        <h2>Hardware Specs for Recreation</h2>
+        <ul>
+            <li>I generated the reported results on a standard CPU.</li>
+            <li>Training time: &lt; 2 minutes on CPU.</li>
+        </ul>
+    </div>
+</body>
+
+</html>
