@@ -1,0 +1,10 @@
+numpy>=1.24
+torch>=2.0
+scipy
+pandas
+plotly
+tqdm
+matplotlib
+jupyter
+qiskit>=1.0.0
+qiskit-aer
